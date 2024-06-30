@@ -1,5 +1,7 @@
 #!/usr/bin/env python3.12
 
+# https://ollama.com/blog/embedding-models
+
 import os
 import sys
 import json
