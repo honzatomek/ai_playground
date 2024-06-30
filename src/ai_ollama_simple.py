@@ -12,7 +12,6 @@ import rich
 from rich import print_json
 
 import ollama
-
 from ollama import Client
 
 AVAILABLE_MODELS = ["llama3"]
