@@ -38,6 +38,27 @@ def dict_to_md(d: dict, level: int = 0) -> str:
     return ret.rstrip("\n") + "\n\n\n"
 
 
+def flatten_dict(d: dict, parent: str = "", delim: str = "#"):
+    newd = {}
+    if "_name" in d.keys():
+        if d["_contents"].lstrip("\n").split("\n")[0] != d["_name"]:
+            newd.setdefault(parent + d["_name"], d["_name"] + "\n\n" + d["_contents"].lstrip("\n"))
+        else:
+            newd.setdefault(parent + d["_name"], d["_contents"])
+        parent += d["_name"] + delim
+
+    for k, v in [(k, v) for k, v in d.items() if not k.startswith("_")]:
+        if isinstance(v, dict):
+            newd.update(flatten_dict(d[k], parent, delim))
+        else:
+            if d[k].split("\n")[0] != k:
+                newd.setdefault(parent + k, k + "\n\n" + d[k])
+            else:
+                newd.setdefault(parent + k, d[k])
+
+    return newd
+
+
 def stripline(line: str) -> str:
     while "  " in line:
         line = line.replace("  ", " ")
@@ -69,7 +90,7 @@ def get_offset(file: io.TextIOWrapper) -> int:
     if len(offset) < 5:
         return 0
     else:
-        return min(offset[2:])
+        return min(offset[1:])
 
 
 def is_subtitle(suptitle: str, subtitle: str) -> bool:
@@ -84,11 +105,18 @@ def is_subtitle(suptitle: str, subtitle: str) -> bool:
 
 
 def readline(file: io.TextIOWrapper) -> (int, str, str):
-    last_pos = file.tell()
-    line = file.readline()
+    while True:
+        last_pos = file.tell()
+        line = file.readline()
 
-    if not line: # EOF
-        return last_pos, "", line
+        if not line: # EOF
+            return last_pos, "", "", line
+
+        _line = stripline(line)
+        if _line in skip:
+            continue
+        else:
+            break
 
     line = line.lstrip("")
     if "" in line:
@@ -104,28 +132,52 @@ def readline(file: io.TextIOWrapper) -> (int, str, str):
     offset = -1
 
     if re.match(_RE_FOOTER_L, line):
-        last_pos = file.tell()
-        line = file.readline()
+        while True:
+            last_pos = file.tell()
+            line = file.readline()
+            if not line:
+                return last_pos, "", "", line
+            _line = stripline(line)
+            if _line in skip:
+                continue
+            elif _line == "":
+                continue
+            else:
+                break
         line = line.lstrip("").strip()
         keyword = re.split(_RE_KEYWORD, line)
+        # print(keyword)
         if len(keyword) > 1:
             keyword = keyword[0].upper()
             # print(f"{keyword = }")
         else:
             keyword = ""
         offset = get_offset(file)
+        line += "\n"
 
     elif re.match(_RE_FOOTER_R, line):
-        last_pos = file.tell()
-        line = file.readline()
+        while True:
+            last_pos = file.tell()
+            line = file.readline()
+            if not line:
+                return last_pos, "", "", line
+            _line = stripline(line)
+            if _line in skip:
+                continue
+            elif _line == "":
+                continue
+            else:
+                break
         line = line.lstrip("").strip()
         keyword = re.split(_RE_KEYWORD, line)
+        # print(keyword)
         if len(keyword) > 1:
             keyword = keyword[-1].upper()
             # print(f"{keyword = }")
         else:
             keyword = ""
         offset = get_offset(file)
+        line += "\n"
 
     return last_pos, keyword, offset, line
 
@@ -220,7 +272,17 @@ skip = set(["How-to",
             "SIMDRIVE3D",
             "SIMPACK",
             "Appendix",
-            "Index"])
+            "Index",
+            "PERMAS User’s Reference Manual (EDU)",
+            "E-1",
+            "E-2",
+            "E-3",
+            "E-4",
+            "E-5",
+            "E-6",
+            "E-7",
+            "V 19.00.287",
+            ])
 
 
 do_break = False
@@ -239,10 +301,18 @@ with open(UM450, "rt", encoding="utf-8") as um450:
 
         # print(line[offset:])
 
-        if _k != "":
+        if _k != "" and not title.startswith("6"):
+            if _k != keyword:
+                if keyword in p.keys() and p[keyword].strip() == "":
+                    p.pop(keyword)
             keyword = _k
             # print(f"{keyword = }")
-            continue
+            for kw in ("UCI-Index", "DAT-Index", "Global Index"):
+                if line.startswith(kw):
+                    line = kw + "\n"
+                    break
+            else:
+                continue
 
         _line = stripline(line)
         if _line in ("Contents", "Table of Contents"):
@@ -257,14 +327,17 @@ with open(UM450, "rt", encoding="utf-8") as um450:
             continue
 
         elif _line in TOC:
-            if is_subtitle(_line, title):
-                continue
-            elif title == _line:
-                continue
+            if _line in ("UCI-Index", "DAT-Index", "Global Index"):
+                pass
+            else:
+                if is_subtitle(_line, title):
+                    continue
+                elif title == _line:
+                    continue
             title = _line
             print(f"{title = }")
-            # if title.startswith("2 "):
-            #     breakpoint()
+            if keyword in p.keys() and p[keyword].strip() == "":
+                p.pop(keyword)
             keyword = ""
             if title in ("UCI-Index", "DAT-Index", "Global Index"):
                 number = [title]
@@ -306,6 +379,8 @@ with open(UM450, "rt", encoding="utf-8") as um450:
 
 for key in ("Contents", "Table of Contents", "UCI-Index", "DAT-Index", "Global Index"):
     parsed.pop(key)
+
+flattened = flatten_dict(parsed)
 
 ret = dict_to_md(parsed)
 
