@@ -409,7 +409,7 @@ class Embeddings:
             self.dict  = {k: str_dict[k]["_contents"]  for k in self.keys}
             keys       = []
             embeddings = []
-            for k, v in self.dict.items():
+            for k, v in str_dict.items():
                 if "_embedding" in v.keys():
                     keys.append(k)
                     embeddings.append(v["_embedding"])

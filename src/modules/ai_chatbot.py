@@ -14,7 +14,13 @@ from rich import print_json
 import ollama
 from ollama import Client
 
+from ai_embed import Embeddings
+
 LLM_MODELS = ["llama3"]
+
+
+PERMAS_MANUAL = "../../res/um450_edu_v19.json"
+EMBEDDINGS = None
 
 
 def get_type_name(t: Type):
@@ -133,8 +139,33 @@ def write_file(filename: str, text: str) -> str:
     try:
         with open(filename, "wt", encoding="utf-8") as file:
             file.write(text)
+        return f"File {filename:s} successfully written."
     except Exception as e:
         return str(e)
+
+
+
+def search_similar(prompt: str) -> str:
+    """searches similar strings in PERMAS manual and returns 5 closest matches
+
+    Args:
+        prompt: search string
+
+    Returns:
+        10 closest matches from PERMAS manual
+    """
+    global EMBEDDINGS
+
+    if EMBEDDINGS is None:
+        EMBEDDINGS = Embeddings.from_json(PERMAS_MANUAL, index_dtype="IP")
+        EMBEDDINGS.create_index()
+
+    retval = ""
+    for i, response in enumerate(EMBEDDINGS.search(prompt, 10)):
+        retval += f"Response {i+1:d}:"
+        retval += response
+
+    return retval
 
 
 
@@ -374,7 +405,6 @@ User Query:
             tool_call = self.tools[tool["tool"]].show(**tool["tool_input"])
             response = self.tools[tool["tool"]].call(**tool["tool_input"])
             self.messages.append(Message(role="tool", content=response))
-            # print(f"{self[-1].role:s} {tool_call:s} >" + "\n" + f"{self[-1].content:s}" + "\n")
             self[-1].print(tool_call)
 
         return self.messages[-1]
@@ -392,9 +422,6 @@ User Query:
 
             response = self.communicate()
             if response.role == "assistant":
-                # contents = ("\n" + " " * 12).join(self[-1].content.split("\n"))
-                # print(f"{self[-1].role:<9s} > {contents:s}")
-                # print(f"> {self[-1].role:s}: " + "\n" + "\n ".join(self[-1].content.split("\n") + "\n")
                 self[-1].print()
 
 
@@ -406,6 +433,7 @@ if __name__ == "__main__":
     chatbot.register_tool(read_file)
     chatbot.register_tool(directory_contents)
     chatbot.register_tool(write_file)
+    chatbot.register_tool(search_similar)
     chatbot.chat()
 
 
